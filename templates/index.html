@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart City Traffic Monitor</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; background: #f4f7fb; color: #222; }
+      h1 { margin-bottom: 8px; }
+      .card { background: #fff; padding: 18px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); max-width: 800px; margin-bottom: 18px; }
+      .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+      .metric { padding: 14px; border: 1px solid #e1e7ef; border-radius: 10px; background: #f9fbff; }
+      .metric strong { display: block; font-size: 1.4rem; margin-bottom: 6px; }
+      input, button { font-size: 1rem; padding: 10px 12px; border-radius: 8px; border: 1px solid #ccd6e0; }
+      button { cursor: pointer; background: #1f6feb; color: white; border: none; }
+      button:hover { background: #1558c0; }
+      .hint { font-size: 0.95rem; color: #555; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Smart City Traffic Monitor</h1>
+      <p>Use the API endpoints below to stream video and view traffic counts.</p>
+      <div class="hint">If you want to use the default webcam stream, open <code>/video_feed?video_path=0</code>. For uploaded videos, upload a file via API or use the backend UI if available.</div>
+    </div>
+    <div class="card">
+      <h2>Current Traffic Data</h2>
+      <div class="metrics">
+        <div class="metric"><strong id="vehicle_count">0</strong>Vehicles</div>
+        <div class="metric"><strong id="cars">0</strong>Cars</div>
+        <div class="metric"><strong id="bikes">0</strong>Bikes</div>
+        <div class="metric"><strong id="buses">0</strong>Buses</div>
+        <div class="metric"><strong id="trucks">0</strong>Trucks</div>
+        <div class="metric"><strong id="density">LOW</strong>Density</div>
+        <div class="metric"><strong id="prediction">STABLE</strong>Prediction</div>
+        <div class="metric"><strong id="confidence">0.5</strong>Confidence</div>
+      </div>
+      <div class="hint">Last update: <span id="timestamp">--:--:--</span></div>
+    </div>
+    <div class="card">
+      <h2>Stream Viewer</h2>
+      <p>Open this URL in a new browser tab:</p>
+      <p><code>http://localhost:5001/video_feed?video_path=0</code></p>
+      <p class="hint">If your browser blocks webcam access for the server, you can use a video file path instead.</p>
+    </div>
+    <script>
+      async function refreshData() {
+        try {
+          const response = await fetch('/data');
+          const data = await response.json();
+          document.getElementById('vehicle_count').textContent = data.vehicle_count;
+          document.getElementById('cars').textContent = data.cars;
+          document.getElementById('bikes').textContent = data.bikes;
+          document.getElementById('buses').textContent = data.buses;
+          document.getElementById('trucks').textContent = data.trucks;
+          document.getElementById('density').textContent = data.density;
+          document.getElementById('prediction').textContent = data.prediction;
+          document.getElementById('confidence').textContent = data.confidence.toFixed(2);
+          document.getElementById('timestamp').textContent = data.timestamp || '--:--:--';
+        } catch (error) {
+          console.warn('Unable to refresh data', error);
+        }
+      }
+      setInterval(refreshData, 1000);
+      refreshData();
+    </script>
+  </body>
+</html>
