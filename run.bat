@@ -4,10 +4,10 @@ echo Starting Smart Traffic Dashboard...
 echo ---------------------------------------
 
 echo [1/2] Starting Python Backend ...
-start "Backend (Python)" cmd /k "set OPENBLAS_NUM_THREADS=1 && set OMP_NUM_THREADS=1 && python app.py"
+start "Backend (Python)" cmd /k "cd backend && set OPENBLAS_NUM_THREADS=1 && set OMP_NUM_THREADS=1 && python app.py"
 
 echo [2/2] Starting React Frontend ...
-cd traffic-dashboard
+cd frontend
 start "Frontend (React)" cmd /k "set PORT=3001 && set NODE_OPTIONS=--max-old-space-size=8192 --openssl-legacy-provider && npm start"
 
 echo.
