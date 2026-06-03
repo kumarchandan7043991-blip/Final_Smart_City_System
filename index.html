@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>REAL-TIME TRAFFIC ANALYSIS AND CONGESTION DETECTION USING COMPUTER VISION</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #03060b;
+      --panel: rgba(8, 16, 30, 0.92);
+      --panel-soft: rgba(16, 29, 52, 0.86);
+      --border: rgba(55, 175, 255, 0.18);
+      --accent: #2fe4ff;
+      --accent2: #ff6a47;
+      --text: #ebf5ff;
+      --muted: #a3b9ce;
+      --shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+      --radius: 28px;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: radial-gradient(circle at top, rgba(7,26,52,.6), transparent 26%), linear-gradient(180deg, #010409 0%, #041122 100%); color: var(--text); overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; }
+    #presentation { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
+    #particleCanvas { position: absolute; inset: 0; z-index: 0; }
+    #gridOverlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: linear-gradient(rgba(47,228,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(47,228,255,0.07) 1px, transparent 1px); background-size: 120px 120px; opacity: 0.25; }
+    #slideContainer { position: relative; z-index: 2; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .slide { width: min(1320px, calc(100vw - 80px)); max-height: calc(100vh - 80px); padding: 48px; border-radius: 36px; background: rgba(3, 8, 20, 0.94); border: 1px solid rgba(68, 172, 255, 0.18); box-shadow: var(--shadow); display: grid; grid-template-columns: 1fr; gap: 28px; opacity: 0; transform: translateY(32px); transition: transform 0.65s ease, opacity 0.65s ease; }
+    .slide.active { opacity: 1; transform: translateY(0); }
+    .slide-title { font-size: clamp(2.6rem, 4vw, 4.6rem); line-height: 1.02; letter-spacing: -0.06em; color: #f7fbff; }
+    .slide-subtitle { color: var(--accent); font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 16px; }
+    .panel { background: rgba(14, 26, 46, 0.9); border: 1px solid rgba(47, 228, 255, 0.12); border-radius: var(--radius); padding: 30px; display: grid; gap: 18px; }
+    .panel strong { color: #d8f5ff; }
+    .panel p, .panel li { font-size: 1rem; line-height: 1.8; color: var(--muted); }
+    .panel li { margin-bottom: 0.9rem; }
+    .panel ul { padding-left: 1.4rem; }
+    .flow-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; color: var(--accent); font-weight: 600; }
+    .flow-row span { display: inline-flex; align-items: center; gap: 12px; }
+    .chip { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; background: rgba(24, 47, 77, 0.85); color: #c5e9ff; border: 1px solid rgba(47, 228, 255, 0.16); }
+    .grid-2 { display: grid; gap: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { background: rgba(10, 22, 38, 0.92); border: 1px solid rgba(56, 164, 255, 0.14); border-radius: 26px; padding: 24px; display: grid; gap: 12px; }
+    .card h3 { color: #e7f9ff; font-size: 1.1rem; }
+    .card p { color: var(--muted); }
+    .highlight { padding: 22px; border-radius: 28px; background: rgba(9, 16, 28, 0.95); border: 1px solid rgba(255, 106, 71, 0.16); color: #fff; }
+    .highlight strong { color: var(--accent2); }
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .stat { border-radius: 24px; padding: 22px; background: rgba(11, 20, 32, 0.92); border: 1px solid rgba(47,228,255,0.12); }
+    .stat h4 { color: #dff7ff; margin-bottom: 0.7rem; }
+    .stat p { color: var(--muted); }
+    .nav { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; gap: 12px; z-index: 3; }
+    .nav-button { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.22); background: transparent; cursor: pointer; transition: background 0.3s ease, transform 0.3s ease; }
+    .nav-button.active, .nav-button:hover { background: var(--accent); transform: scale(1.12); }
+    .side-label { position: absolute; top: 40px; right: 40px; color: rgba(255,255,255,0.55); font-size: 0.95rem; letter-spacing: 0.16em; text-transform: uppercase; z-index: 3; }
+    .slide-note { color: var(--muted); font-size: 0.95rem; }
+    .traffic-grid { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0.14; }
+    .traffic-grid::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at top left, rgba(47,228,255,0.11), transparent 22%), radial-gradient(circle at bottom right, rgba(255,106,71,0.09), transparent 16%); }
+    .traffic-badge { display: inline-flex; gap: 10px; align-items: center; padding: 12px 18px; border-radius: 999px; background: rgba(7, 18, 32, 0.85); border: 1px solid rgba(47,228,255,0.16); color: #daf4ff; }
+    .text-grid { display: grid; gap: 18px; }
+    .slide-footer { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 0.95rem; }
+    .slide-footer span { display: inline-flex; align-items: center; gap: 8px; }
+    .traffic-visual { position: relative; min-height: 260px; border-radius: 28px; background-image: linear-gradient(180deg, rgba(5,18,32,0.92), rgba(8,23,42,0.94)), linear-gradient(90deg, rgba(47,228,255,0.08), transparent 25%), linear-gradient(180deg, transparent 40%, rgba(255,106,71,0.08)); border: 1px solid rgba(47,228,255,0.14); overflow: hidden; }
+    .traffic-visual::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle at 20% 20%, rgba(47,228,255,0.14), transparent 12%), radial-gradient(circle at 80% 40%, rgba(255,106,71,0.12), transparent 16%); pointer-events: none; }
+    .visual-lines { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+    .visual-lines span { display: block; border-left: 1px solid rgba(255,255,255,0.06); opacity: 0.5; }
+    .visual-nodes { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 0; }
+    .visual-nodes span { width: 10px; height: 10px; border-radius: 50%; background: rgba(47,228,255,0.4); opacity: 0.6; justify-self: center; align-self: center; }
+    .traffic-boxes { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 24px; }
+    .traffic-box { width: 100%; min-height: 40px; border-radius: 16px; background: rgba(20, 40, 66, 0.9); border: 1px solid rgba(47,228,255,0.18); opacity: 0.9; animation: pulseBox 4s ease-in-out infinite alternate; }
+    .traffic-box:nth-child(2n) { animation-delay: 0.9s; }
+    .traffic-box:nth-child(3n) { animation-delay: 1.5s; }
+    .traffic-box:nth-child(4n) { animation-delay: 0.4s; }
+    .traffic-box:nth-child(5n) { animation-delay: 1.1s; }
+    @keyframes pulseBox { from { transform: translateY(0); opacity: 0.8; } to { transform: translateY(-8px); opacity: 1; } }
+    .small-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .small-grid div { flex: 1 1 120px; border-radius: 20px; padding: 14px; background: rgba(9, 17, 30, 0.94); border: 1px solid rgba(47,228,255,0.12); color: #b6d7e7; }
+    .footer-cta { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 999px; background: rgba(8, 18, 34, 0.95); border: 1px solid rgba(47,228,255,0.14); color: #c7e9ff; }
+    .split-visual { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .split-visual .panel { min-height: 250px; }
+    .glow-title { text-shadow: 0 0 28px rgba(47,228,255,0.22); }
+    .animated-dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(180deg, #2fe4ff, #34b3ff); box-shadow: 0 0 18px rgba(47,228,255,0.35); animation: glowMove 3.2s ease-in-out infinite alternate; }
+    @keyframes glowMove { from { transform: translateY(0); opacity: 0.9; } to { transform: translateY(-6px); opacity: 1; } }
+    .footer-small { font-size: 0.9rem; color: #8ea9c4; }
+    .title-meta { display: grid; gap: 10px; font-size: 0.98rem; color: #d9e9ff; }
+    .title-meta span { display: inline-flex; gap: 10px; align-items: center; }
+    .title-meta strong { color: var(--accent); }
+    .highlight-title { font-size: 1.2rem; color: #dffcff; }
+    .feature-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .feature-card { border-radius: 22px; padding: 20px; background: rgba(10, 18, 29, 0.92); border: 1px solid rgba(47,228,255,0.12); }
+    .feature-card h4 { margin-bottom: 0.75rem; color: #effbff; }
+    .feature-card p { color: var(--muted); line-height: 1.65; }
+    .legend-item { display: flex; align-items: flex-start; gap: 12px; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; background: linear-gradient(180deg, #2fe4ff, #31b1ff); }
+    .big-quote { font-size: clamp(1.2rem, 1.4vw, 1.5rem); color: #e3f7ff; line-height: 1.7; }
+    .mini-footer { display: flex; gap: 14px; flex-wrap: wrap; color: #8aa8c2; font-size: 0.92rem; }
+    button { all: unset; cursor: pointer; }
+    @media(max-width: 1100px) {
+      .grid-2, .stats, .feature-row, .split-visual { grid-template-columns: 1fr; }
+      .slide { padding: 28px; }
+      .side-label { right: 20px; top: 20px; }
+    }
+    @media(max-width: 700px) {
+      .slide { width: calc(100vw - 32px); height: calc(100vh - 32px); padding: 20px; }
+      .slide-title { font-size: 2.2rem; }
+      .nav { bottom: 14px; }
+      .nav-button { width: 14px; height: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="presentation">
+    <canvas id="particleCanvas"></canvas>
+    <div id="gridOverlay"></div>
+    <div id="slideContainer"></div>
+    <div class="nav" id="navDots"></div>
+    <div class="side-label">AI Traffic Infrastructure</div>
+  </div>
+  <script>
+    const slidesData = [
+      {
+        title: 'REAL-TIME TRAFFIC ANALYSIS AND CONGESTION DETECTION USING COMPUTER VISION',
+        subtitle: 'An Intelligent Traffic Perception and Analytics Framework',
+        content: `<div class="title-meta"><span><strong>College:</strong> Government Engineering College, Palamu</span><span><strong>Department:</strong> Department of Computer Science and Engineering</span><span><strong>Course:</strong> CS702D Major Project</span><span><strong>Guide:</strong> Mr. Deepak Kr. Ravi</span><span><strong>Students:</strong> Ashish Kumar [22021440014], Chandan Kumar [22021440016], Chandrashekhar Mahato [22021440017], Ritika Kashish [22021440048]</span></div>`,
+        visual: `
+          <div class="traffic-visual">
+            <div class="visual-lines"><span></span><span></span><span></span></div>
+            <div class="visual-nodes"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="traffic-boxes"><div class="traffic-box"></div><div class="traffic-box"></div><div class="traffic-box"></div><div class="traffic-box"></div><div class="traffic-box"></div></div>
+          </div>
+        `
+      },
+      {
+        title: 'PROBLEM LANDSCAPE',
+        subtitle: 'Urban congestion demands intelligent monitoring',
+        content: `<div class="flow-row"><span>Urbanization</span><span>Vehicle Growth</span><span>Traffic Density Explosion</span><span>Congestion</span><span>Fuel Waste + Pollution + Delays</span><span>Need Intelligent Traffic Monitoring</span></div><div class="panel"><p>Modern cities generate massive traffic movement continuously. Traditional monitoring systems struggle to interpret dynamic traffic environments efficiently. Increasing vehicle density creates congestion, fuel wastage, pollution, and transportation inefficiency.</p></div>`,
+        visual: `
+          <div class="traffic-visual">
+            <div class="small-grid"><div>City grid density rising</div><div>Vehicle flow intensity</div><div>Congestion heat zones</div></div>
+          </div>
+        `
+      },
+      {
+        title: 'LIMITATIONS OF EXISTING SYSTEMS',
+        subtitle: 'Observation without intelligence',
+        content: `<div class="grid-2"><div class="card"><h3>Manual Monitoring</h3><ul><li>Human dependency</li><li>Delayed response</li><li>Limited scalability</li></ul></div><div class="card"><h3>Sensor-Based Systems</h3><ul><li>Expensive infrastructure</li><li>Maintenance complexity</li><li>Limited flexibility</li></ul></div></div><div class="card"><h3>Static Signal Systems</h3><ul><li>Fixed timing logic</li><li>Non-adaptive traffic flow</li><li>Inefficient congestion handling</li></ul></div><div class="highlight"><strong>Core insight:</strong> Traditional systems focus primarily on traffic observation rather than intelligent traffic understanding.</div>`,
+        visual: `
+          <div class="traffic-visual"><div class="feature-row"><div class="feature-card"><h4>Legacy</h4><p>Reactive, manual, and unable to scale with city speed.</p></div><div class="feature-card"><h4>Infrastructure</h4><p>Hardware-heavy detection does not solve intelligence gaps.</p></div><div class="feature-card"><h4>Signals</h4><p>Static timing fails under dynamic congestion.</p></div></div></div>
+        `
+      },
+      {
+        title: 'CORE ENGINEERING QUESTION',
+        subtitle: 'Transforming raw streams into real intelligence',
+        content: `<div class="big-quote">“How can raw urban traffic video streams be transformed into real-time actionable traffic intelligence?”</div><div class="panel"><p>The project is not only about vehicle detection. It is about perception, interpretation, analytics, and intelligent transportation understanding.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="chip">Traffic stream → AI architecture</div></div>
+        `
+      },
+      {
+        title: 'PROPOSED SYSTEM OVERVIEW',
+        subtitle: 'A complete intelligent perception pipeline',
+        content: `<div class="flow-row"><span>Traffic Video Stream</span><span>Frame Processing</span><span>AI Vehicle Detection</span><span>Tracking & Counting</span><span>Traffic Analytics</span><span>Congestion Intelligence</span><span>Visualization & Decision Support</span></div><div class="panel"><p>The proposed framework transforms raw traffic video into analytical traffic intelligence using Computer Vision and Artificial Intelligence.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="small-grid"><div>Stream intake</div><div>Frame optimization</div><div>AI detection</div><div>Tracking</div><div>Analytics</div><div>Decision support</div></div></div>
+        `
+      },
+      {
+        title: 'COMPLETE SYSTEM ARCHITECTURE',
+        subtitle: 'Layered intelligent perception pipeline',
+        content: `<div class="grid-2"><div class="card"><h3>Video Acquisition Layer</h3><p>Capture multi-view traffic feeds from intersections and road arteries.</p></div><div class="card"><h3>Preprocessing Layer</h3><p>Optimize frames, reduce noise, and prepare data for inference.</p></div><div class="card"><h3>AI Detection Layer</h3><p>Detect vehicles in real time with a fast inference architecture.</p></div><div class="card"><h3>Tracking & Counting Layer</h3><p>Maintain continuity and produce reliable volume analytics.</p></div><div class="card"><h3>Traffic Analytics Layer</h3><p>Compute density, flow, and congestion intelligence across road segments.</p></div><div class="card"><h3>Visualization Layer</h3><p>Deliver live dashboards and command-ready insights.</p></div></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="legend-item"><div class="legend-dot"></div><div>Multi-stage architecture with vertical data flow.</div></div></div>
+        `
+      },
+      {
+        title: 'VIDEO ACQUISITION & PREPROCESSING',
+        subtitle: 'From raw capture to AI-compatible frames',
+        content: `<div class="flow-row"><span>Raw Traffic Stream</span><span>Frame Extraction</span><span>Noise Reduction</span><span>Resolution Optimization</span><span>AI-Compatible Frames</span></div><div class="panel"><p>Raw traffic video contains computational redundancy and environmental noise. Preprocessing improves inference speed, computational efficiency, and real-time analytical stability.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="feature-row"><div class="feature-card"><h4>Redundancy</h4><p>Filter duplicate frames and reduce wasted compute.</p></div><div class="feature-card"><h4>Noise</h4><p>Eliminate glare, shadows, and camera artifacts.</p></div><div class="feature-card"><h4>Optimization</h4><p>Balance resolution and latency for fast analysis.</p></div></div></div>
+        `
+      },
+      {
+        title: 'AI-BASED VEHICLE DETECTION',
+        subtitle: 'YOLO-enabled real-time perception',
+        content: `<div class="flow-row"><span>Input Frame</span><span>YOLO Inference Engine</span><span>Bounding Box Detection</span><span>Vehicle Classification</span></div><div class="panel"><p>YOLO was selected due to real-time inference capability, low latency, single-stage detection architecture, and scalable deployment suitability.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="text-grid"><div class="highlight-title">YOLO Architecture</div><div class="panel"><p>Fast single-pass detection with bounding-box output for vehicles and classes.</p></div></div></div>
+        `
+      },
+      {
+        title: 'VEHICLE TRACKING & COUNTING',
+        subtitle: 'Maintaining continuity across video frames',
+        content: `<div class="flow-row"><span>Vehicle Detection</span><span>Object ID Assignment</span><span>Movement Tracking</span><span>Temporal Continuity</span><span>Accurate Vehicle Counting</span></div><div class="panel"><p>Tracking prevents duplicate counting and maintains object continuity across sequential frames for accurate traffic estimation.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="small-grid"><div>ID assignment</div><div>Trajectory mapping</div><div>Volume accuracy</div></div></div>
+        `
+      },
+      {
+        title: 'TRAFFIC ANALYTICS ENGINE',
+        subtitle: 'Turning movement into insight',
+        content: `<div class="flow-row"><span>Vehicle Data</span><span>Density Estimation</span><span>Flow Analysis</span><span>Congestion Detection</span><span>Traffic Intelligence</span></div><div class="panel"><p>The system converts raw vehicle movement information into meaningful traffic intelligence through density estimation and congestion interpretation.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="feature-row"><div class="feature-card"><h4>Heatmaps</h4><p>Visualize city hotspots and density pressure.</p></div><div class="feature-card"><h4>Flows</h4><p>Analyze direction and throughput in real time.</p></div><div class="feature-card"><h4>Congestion</h4><p>Detect critical slow zones before spillback occurs.</p></div></div></div>
+        `
+      },
+      {
+        title: 'TECHNOLOGY STACK',
+        subtitle: 'Why each technology exists',
+        content: `<div class="stats"><div class="stat"><h4>Python</h4><p>Rapid AI development ecosystem for model orchestration and analytics.</p></div><div class="stat"><h4>OpenCV</h4><p>Efficient computer vision operations for preprocessing and visual handling.</p></div><div class="stat"><h4>YOLO</h4><p>Real-time object detection architecture for low-latency perception.</p></div><div class="stat"><h4>Flask</h4><p>Backend communication and integration layer for dashboards and APIs.</p></div><div class="stat"><h4>MongoDB</h4><p>Flexible analytical storage for traffic metrics and event queries.</p></div></div><div class="highlight"><strong>Stack rationale:</strong> The selected technology stack balances scalability, computational efficiency, and real-time analytical performance.</div>`,
+        visual: `
+          <div class="traffic-visual"><div class="chip">AI stack | Vision | Analytics | Deployment</div></div>
+        `
+      },
+      {
+        title: 'RESULTS & OUTPUTS',
+        subtitle: 'Real-time perception delivering operational outputs',
+        content: `<div class="grid-2"><div class="card"><h3>Vehicle Detection</h3><p>Continuous detection output across complex city scenes.</p></div><div class="card"><h3>Tracking Output</h3><p>Persistent object IDs and flow continuity across frames.</p></div><div class="card"><h3>Congestion Analytics</h3><p>Insight into density and slow zone intensity for decision makers.</p></div><div class="card"><h3>FPS Metrics</h3><p>Real-time inference performance metrics for monitoring responsiveness.</p></div></div><div class="highlight">The framework successfully demonstrated real-time traffic perception and analytical capability under dynamic urban traffic conditions.</div>`,
+        visual: `
+          <div class="traffic-visual"><div class="small-grid"><div>Detection screens</div><div>Tracking overlays</div><div>Density metrics</div><div>Performance dashboards</div></div></div>
+        `
+      },
+      {
+        title: 'SYSTEM LIMITATIONS',
+        subtitle: 'Engineering risks and operational challenges',
+        content: `<div class="grid-2"><div class="card"><h3>Low Light</h3><p>Reduced visibility weakens detection accuracy.</p></div><div class="card"><h3>Occlusion</h3><p>Partial visibility complicates tracking and continuity.</p></div><div class="card"><h3>High Resolution Streams</h3><p>Large frames increase computational load and latency.</p></div><div class="card"><h3>Variable Environments</h3><p>Weather, lighting, and camera placement affect perception reliability.</p></div></div><div class="highlight">Environmental variability and computational overhead remain key engineering challenges within intelligent traffic analytics systems.</div>`,
+        visual: `
+          <div class="traffic-visual"><div class="feature-row"><div class="feature-card"><h4>Night mode</h4><p>Performance drops in challenging illumination.</p></div><div class="feature-card"><h4>Occlusion</h4><p>Hidden vehicles require robust tracking logic.</p></div><div class="feature-card"><h4>Throughput</h4><p>High-resolution feeds demand optimized pipelines.</p></div></div></div>
+        `
+      },
+      {
+        title: 'ENGINEERING CONTRIBUTIONS',
+        subtitle: 'Moving beyond detection to intelligence',
+        content: `<div class="panel"><p>The project contribution is not only vehicle detection. The real contribution is: Real-Time Urban Traffic Intelligence Generation through AI-Based Environmental Perception.</p></div><div class="feature-row"><div class="feature-card"><h4>Scalable Modular Architecture</h4><p>Designed for evolving smart-city deployments.</p></div><div class="feature-card"><h4>Intelligent Traffic Analytics</h4><p>Generates operational decision-ready insights.</p></div><div class="feature-card"><h4>AI-Driven Perception Pipeline</h4><p>Delivers adaptive and data-rich traffic understanding.</p></div><div class="feature-card"><h4>Congestion Interpretation Framework</h4><p>Transforms raw detection into meaningful transportation intelligence.</p></div></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="legend-item"><div class="legend-dot"></div><div>Integrated architecture glowing as a unified system.</div></div></div>
+        `
+      },
+      {
+        title: 'FUTURE SCOPE',
+        subtitle: 'Scaling toward autonomous smart-city systems',
+        content: `<div class="flow-row"><span>Real-Time Analytics</span><span>Adaptive Traffic Signals</span><span>Edge AI Systems</span><span>Predictive Traffic Intelligence</span><span>Autonomous Smart-City Infrastructure</span></div><div class="panel"><p>The proposed framework can evolve toward adaptive transportation systems, predictive congestion analytics, and intelligent smart-city infrastructures.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="small-grid"><div>Adaptive signals</div><div>Edge inference</div><div>Predictive alerts</div><div>Smart mobility</div></div></div>
+        `
+      },
+      {
+        title: 'CONCLUSION',
+        subtitle: 'From static monitoring to real-time intelligence',
+        content: `<div class="flow-row"><span>Traditional Monitoring</span><span>Static Observation</span><span>Limited Intelligence</span></div><div class="flow-row"><span>AI-Based Systems</span><span>Automated Perception</span><span>Real-Time Traffic Intelligence</span></div><div class="highlight">The project establishes a scalable intelligent traffic perception and analytics framework using Computer Vision and Artificial Intelligence.</div>`,
+        visual: `
+          <div class="traffic-visual"><div class="chip">Scalable. Intelligent. Infrastructure-ready.</div></div>
+        `
+      },
+      {
+        title: 'THANK YOU',
+        subtitle: 'Questions & Discussion',
+        content: `<div class="panel"><p>Thank you for reviewing our AI-powered intelligent transportation infrastructure presentation. We welcome your questions and discussion on deployment, architecture, and future expansion.</p></div>`,
+        visual: `
+          <div class="traffic-visual"><div class="mini-footer"><span>Government Engineering College, Palamu</span><span>Department of Computer Science and Engineering</span><span>CS702D Major Project</span></div></div>
+        `
+      }
+    ];
+
+    const slideContainer = document.getElementById('slideContainer');
+    const navDots = document.getElementById('navDots');
+    let currentSlide = 0;
+    function createSlides() {
+      slidesData.forEach((slide, index) => {
+        const slideEl = document.createElement('section');
+        slideEl.className = 'slide';
+        if (index === 0) slideEl.classList.add('active');
+        slideEl.innerHTML = `
+          <div class="slide-subtitle">${slide.subtitle}</div>
+          <h1 class="slide-title glow-title">${slide.title}</h1>
+          <div class="text-grid">${slide.content}</div>
+          ${slide.visual || ''}
+          <div class="slide-footer"><span>Slide ${index + 1} of ${slidesData.length}</span><span class="footer-small">Use ← → or click dots to navigate.</span></div>
+        `;
+        slideContainer.appendChild(slideEl);
+        const dot = document.createElement('button');
+        dot.className = 'nav-button';
+        if (index === 0) dot.classList.add('active');
+        dot.addEventListener('click', () => goToSlide(index));
+        navDots.appendChild(dot);
+      });
+    }
+    function goToSlide(index) {
+      const slides = document.querySelectorAll('.slide');
+      if (index < 0 || index >= slides.length) return;
+      slides[currentSlide].classList.remove('active');
+      navDots.children[currentSlide].classList.remove('active');
+      currentSlide = index;
+      slides[currentSlide].classList.add('active');
+      navDots.children[currentSlide].classList.add('active');
+    }
+    window.addEventListener('keydown', event => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+        goToSlide(Math.min(currentSlide + 1, slidesData.length - 1));
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        goToSlide(Math.max(currentSlide - 1, 0));
+      }
+    });
+    slideContainer.addEventListener('click', () => goToSlide(Math.min(currentSlide + 1, slidesData.length - 1)));
+    function initParticles() {
+      const canvas = document.getElementById('particleCanvas');
+      const ctx = canvas.getContext('2d');
+      let width = canvas.width = window.innerWidth;
+      let height = canvas.height = window.innerHeight;
+      const particles = Array.from({ length: 90 }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        size: Math.random() * 2.2 + 1.4,
+        alpha: Math.random() * 0.4 + 0.15
+      }));
+      function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resize);
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.x < 0 || p.x > width) p.vx *= -1;
+          if (p.y < 0 || p.y > height) p.vy *= -1;
+          ctx.fillStyle = `rgba(47, 228, 255, ${p.alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        requestAnimationFrame(draw);
+      }
+      draw();
+    }
+
+    function init() {
+      createSlides();
+      initParticles();
+    }
+    init();
+  </script>
+</body>
+</html>
