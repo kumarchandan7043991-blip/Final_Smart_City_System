@@ -16,7 +16,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Load YOLOv8 model (downloads 'yolov8n.pt' on first run)
-model = YOLO(MODEL_PATH)
+model = None
 
 # COCO Class IDs for vehicles: 2=car, 3=motorcycle(bike), 5=bus, 7=truck
 VEHICLE_CLASSES = VEHICLE_CLASSES
